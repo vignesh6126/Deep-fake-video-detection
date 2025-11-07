@@ -30,7 +30,8 @@ pipeline {
             steps {
                 dir('backend') {
                     echo "Installing backend dependencies..."
-                    bat 'pip install -r requirements.txt'
+                    bat '"C:\\Users\\vigne\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\\python.exe" -m pip install -r requirements.txt'
+        }
                 }
             }
         }
