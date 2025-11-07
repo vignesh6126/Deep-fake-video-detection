@@ -9,6 +9,7 @@ from video_utils import allowed_file, sample_frames, frame_to_base64_bgr
 from detector import DeepfakeDetector
 import torch
 
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = Flask(__name__)
 CORS(app)

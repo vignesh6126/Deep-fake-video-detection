@@ -1,0 +1,11 @@
+__pycache__/
+*.pt
+*.mp4
+uploads/
+.git
+*.log
+*.md
+*.csv
+venv/
+.env
+__init__.py
