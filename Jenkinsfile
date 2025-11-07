@@ -29,15 +29,17 @@ pipeline {
         }
 
         stage('Backend Preparation') {
-            steps {
-                dir('backend') {
-                    echo "Installing backend dependencies..."
-                    bat "\"${env.PYTHON_PATH}\" -m pip install --upgrade pip"
-                    bat "\"${env.PYTHON_PATH}\" -m pip install -r requirements.txt"
-                    echo "✅ Backend dependencies installed successfully."
-                }
-            }
+    steps {
+        dir('backend') {
+            echo "Installing backend dependencies..."
+            bat 'python --version'
+            bat 'python -m pip install --upgrade pip'
+            bat 'python -m pip install -r requirements.txt'
+            echo "✅ Backend dependencies installed successfully."
         }
+    }
+}
+
 
         stage('Build Docker Images') {
             steps {
