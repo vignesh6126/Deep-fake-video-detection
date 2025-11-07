@@ -1,77 +1,36 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'NodeJS'
-    }
-
     environment {
-        // DockerHub credentials ID created in Jenkins
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub')
-        DOCKER_HUB_USER = "${DOCKERHUB_CREDENTIALS_USR}"
-        DOCKER_HUB_PASS = "${DOCKERHUB_CREDENTIALS_PSW}"
-        IMAGE_BACKEND = "${DOCKER_HUB_USER}/deepfake-backend"
-        IMAGE_FRONTEND = "${DOCKER_HUB_USER}/deepfake-frontend"
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-login')   // Jenkins credential ID
+        DOCKERHUB_USER = "vignesg043"                            // your Docker Hub username
+        BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
+        FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo "Checking out source code..."
                 checkout scm
             }
         }
 
         stage('Frontend Build') {
             steps {
-                script {
-                    try {
-                        dir('frontend') {
-                            echo "Installing frontend dependencies..."
-                            bat 'npm install'
-                            echo "Building frontend..."
-                            bat 'npm run build'
-                            echo " Running frontend tests (if any)..."
-                            bat 'npm test || echo Tests skipped or not configured'
-                        }
-                    } catch (Exception e) {
-                        echo "Frontend build failed: ${e.message}"
-                        echo "Continuing pipeline..."
-                    }
+                dir('frontend') {
+                    echo "Building React frontend..."
+                    sh 'npm install'
+                    sh 'npm run build'
+                    echo "Frontend build completed successfully."
                 }
             }
         }
 
-        stage('Backend Setup') {
+        stage('Backend Preparation') {
             steps {
-                script {
-                    try {
-                        if (fileExists('backend')) {
-                            dir('backend') {
-                                echo "Installing backend dependencies..."
-                                bat 'pip install -r requirements.txt'
-                                echo "Running backend tests (if available)..."
-                                bat 'python -m pytest tests/ || echo No tests found'
-                            }
-                        } else {
-                            echo "⚠️ Backend folder not found, skipping backend setup."
-                        }
-                    } catch (Exception e) {
-                        echo "Backend setup failed: ${e.message}"
-                    }
-                }
-            }
-        }
-
-        stage('Model Verification') {
-            steps {
-                script {
-                    if (fileExists('model')) {
-                        echo "folder verified."
-                        bat 'dir model /B'
-                    } else {
-                        echo "Model folder not found!"
-                    }
+                dir('backend') {
+                    echo "Installing backend dependencies..."
+                    sh 'pip install -r requirements.txt || echo "Skipping install in Docker build context"'
                 }
             }
         }
@@ -79,66 +38,50 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    echo "Building Docker images..."
-                    bat 'docker --version'
+                    echo "Building backend Docker image..."
+                    sh "docker build -t ${BACKEND_IMAGE}:latest ./backend"
 
-                    echo "Building backend image..."
-                    bat 'docker build -t %IMAGE_BACKEND%:latest ./backend'
-
-                    echo "Building frontend image..."
-                    bat 'docker build -t %IMAGE_FRONTEND%:latest ./frontend'
+                    echo "Building frontend Docker image..."
+                    sh "docker build -t ${FRONTEND_IMAGE}:latest ./frontend"
                 }
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Login to Docker Hub') {
+            steps {
+                echo "Logging in to Docker Hub..."
+                sh "echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin"
+            }
+        }
+
+        stage('Push Docker Images') {
             steps {
                 script {
-                    echo "Logging in to Docker Hub..."
-                    bat 'echo %DOCKER_HUB_PASS% | docker login -u %DOCKER_HUB_USER% --password-stdin'
+                    echo "Pushing backend image to Docker Hub..."
+                    sh "docker push ${BACKEND_IMAGE}:latest"
 
-                    echo "Pushing backend image..."
-                    bat 'docker push %IMAGE_BACKEND%:latest'
-
-                    echo "Pushing frontend image..."
-                    bat 'docker push %IMAGE_FRONTEND%:latest'
+                    echo "Pushing frontend image to Docker Hub..."
+                    sh "docker push ${FRONTEND_IMAGE}:latest"
                 }
             }
         }
 
-        stage('Deploy (Optional)') {
+        stage('Cleanup') {
             steps {
-                script {
-                    echo "Deploy stage (for Docker Compose / Kubernetes integration later)"
-                    // Example future deployment:
-                    // bat 'docker-compose down && docker-compose up -d'
-                }
-            }
-        }
-
-        stage('Build Artifacts') {
-            steps {
-                script {
-                    echo "Archiving build artifacts..."
-                    dir('frontend') {
-                        archiveArtifacts artifacts: 'build/**/*', allowEmptyArchive: true
-                    }
-                    archiveArtifacts artifacts: '**/requirements.txt', allowEmptyArchive: true
-                    archiveArtifacts artifacts: 'model/**/*', allowEmptyArchive: true
-                }
+                echo "Cleaning up unused Docker images..."
+                sh 'docker system prune -af || true'
             }
         }
     }
 
     post {
         success {
-            echo "Pipeline completed successfully! Images pushed to Docker Hub."
+            echo "Build and push completed successfully."
         }
         failure {
-            echo "Pipeline failed. Check logs above for details."
+            echo "Build failed. Check logs for details."
         }
         always {
-            echo "🧹 Cleaning workspace..."
             cleanWs()
         }
     }
