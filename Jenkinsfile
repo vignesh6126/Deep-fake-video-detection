@@ -6,11 +6,9 @@ pipeline {
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
-        PYTHON_PATH = "C:\\Program Files\\Python312\\python.exe"  // update this path if different
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
@@ -29,17 +27,23 @@ pipeline {
         }
 
         stage('Backend Preparation') {
-    steps {
-        dir('backend') {
-            echo "Installing backend dependencies..."
-            bat 'python --version'
-            bat 'python -m pip install --upgrade pip'
-            bat 'python -m pip install -r requirements.txt'
-            echo "✅ Backend dependencies installed successfully."
+            steps {
+                dir('backend') {
+                    echo "Installing backend dependencies..."
+                    bat 'python --version'
+                    bat 'python -m pip install --upgrade pip'
+                    bat 'python -m pip install --no-cache-dir -r requirements.txt'
+                    echo "✅ Backend dependencies installed successfully."
+                }
+            }
         }
-    }
-}
 
+        stage('Verify Docker Daemon') {
+            steps {
+                echo "Checking if Docker is running..."
+                bat 'docker version || (echo ❌ Docker is not running! && exit /b 1)'
+            }
+        }
 
         stage('Build Docker Images') {
             steps {
@@ -55,7 +59,7 @@ pipeline {
 
         stage('Login to Docker Hub') {
             steps {
-                echo "🔐 Logging in to Docker Hub..."
+                echo "🔑 Logging in to Docker Hub..."
                 bat """
                 echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
                 """
@@ -65,10 +69,10 @@ pipeline {
         stage('Push Docker Images') {
             steps {
                 script {
-                    echo "⬆️ Pushing backend image to Docker Hub..."
+                    echo "🚀 Pushing backend image to Docker Hub..."
                     bat "docker push ${BACKEND_IMAGE}:latest"
 
-                    echo "⬆️ Pushing frontend image to Docker Hub..."
+                    echo "🚀 Pushing frontend image to Docker Hub..."
                     bat "docker push ${FRONTEND_IMAGE}:latest"
                 }
             }
@@ -84,7 +88,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Build and push completed successfully!"
+            echo "✅ Build and Docker push completed successfully!"
         }
         failure {
             echo "❌ Build failed. Check logs for details."
