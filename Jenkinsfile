@@ -6,9 +6,11 @@ pipeline {
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
+        PYTHON_PATH = "C:\\Program Files\\Python312\\python.exe"  // update this path if different
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -21,7 +23,7 @@ pipeline {
                     echo "Building React frontend..."
                     bat 'npm install'
                     bat 'npm run build'
-                    echo "Frontend build completed successfully."
+                    echo "✅ Frontend build completed successfully."
                 }
             }
         }
@@ -30,19 +32,20 @@ pipeline {
             steps {
                 dir('backend') {
                     echo "Installing backend dependencies..."
-                    bat '"C:\\Users\\vigne\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\\python.exe" -m pip install -r requirements.txt'
-        }
-            
+                    bat "\"${env.PYTHON_PATH}\" -m pip install --upgrade pip"
+                    bat "\"${env.PYTHON_PATH}\" -m pip install -r requirements.txt"
+                    echo "✅ Backend dependencies installed successfully."
+                }
             }
         }
 
         stage('Build Docker Images') {
             steps {
                 script {
-                    echo "Building backend Docker image..."
+                    echo "🐳 Building backend Docker image..."
                     bat "docker build -t ${BACKEND_IMAGE}:latest ./backend"
 
-                    echo "Building frontend Docker image..."
+                    echo "🐳 Building frontend Docker image..."
                     bat "docker build -t ${FRONTEND_IMAGE}:latest ./frontend"
                 }
             }
@@ -50,7 +53,7 @@ pipeline {
 
         stage('Login to Docker Hub') {
             steps {
-                echo "Logging in to Docker Hub..."
+                echo "🔐 Logging in to Docker Hub..."
                 bat """
                 echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
                 """
@@ -60,10 +63,10 @@ pipeline {
         stage('Push Docker Images') {
             steps {
                 script {
-                    echo "Pushing backend image to Docker Hub..."
+                    echo "⬆️ Pushing backend image to Docker Hub..."
                     bat "docker push ${BACKEND_IMAGE}:latest"
 
-                    echo "Pushing frontend image to Docker Hub..."
+                    echo "⬆️ Pushing frontend image to Docker Hub..."
                     bat "docker push ${FRONTEND_IMAGE}:latest"
                 }
             }
@@ -71,7 +74,7 @@ pipeline {
 
         stage('Cleanup') {
             steps {
-                echo "Cleaning up Docker images..."
+                echo "🧹 Cleaning up Docker images..."
                 bat 'docker system prune -af || echo "Cleanup skipped"'
             }
         }
@@ -79,10 +82,10 @@ pipeline {
 
     post {
         success {
-            echo "Build and push completed successfully."
+            echo "✅ Build and push completed successfully!"
         }
         failure {
-            echo "Build failed. Check logs for details."
+            echo "❌ Build failed. Check logs for details."
         }
         always {
             cleanWs()
