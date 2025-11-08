@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deepfake-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deepfake-frontend
+  template:
+    metadata:
+      labels:
+        app: deepfake-frontend
+    spec:
+      containers:
+        - name: deepfake-frontend
+          image: vignesg043/deepfake-frontend:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: REACT_APP_BACKEND_URL
+              value: "http://backend-service:5000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  selector:
+    app: deepfake-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+  type: LoadBalancer

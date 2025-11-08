@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deepfake-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deepfake-backend
+  template:
+    metadata:
+      labels:
+        app: deepfake-backend
+    spec:
+      containers:
+        - name: deepfake-backend
+          image: vignesg043/deepfake-backend:latest
+          ports:
+            - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  selector:
+    app: deepfake-backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+  type: ClusterIP
