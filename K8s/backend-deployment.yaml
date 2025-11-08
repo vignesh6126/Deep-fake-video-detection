@@ -28,4 +28,5 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
-  type: ClusterIP
+      nodePort: 30008   # ✅ expose externally
+  type: NodePort        # ✅ makes backend reachable via localhost:30008

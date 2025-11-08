@@ -19,7 +19,7 @@ spec:
             - containerPort: 80
           env:
             - name: REACT_APP_BACKEND_URL
-              value: "http://backend-service:8000"
+              value: "http://localhost:30008"   # ✅ external backend URL
 ---
 apiVersion: v1
 kind: Service
