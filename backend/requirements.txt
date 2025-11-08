@@ -11,3 +11,4 @@ Pillow
 tensorflow==2.17.0   # only if using Keras model; remove if not needed              # only if using PyTorch model
 onnxruntime         # only if using ONNX model
 onnx
+#testing cicd
