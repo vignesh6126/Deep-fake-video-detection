@@ -8,8 +8,7 @@ function UploadPage() {
   const navigate = useNavigate();
 
   // ✅ Use environment variable (set in Docker/Kubernetes) or fallback for local dev
-  const backendUrl =
-    process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL;
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);

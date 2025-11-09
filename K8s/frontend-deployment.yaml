@@ -15,11 +15,12 @@ spec:
       containers:
         - name: deepfake-frontend
           image: vignesg043/deepfake-frontend:latest
+          imagePullPolicy: Always   # ✅ Correct placement
           ports:
             - containerPort: 80
           env:
             - name: REACT_APP_BACKEND_URL
-              value: "http://localhost:30008"   # ✅ external backend URL
+              value: "http://localhost:30008"   # ✅ backend NodePort service URL
 ---
 apiVersion: v1
 kind: Service
