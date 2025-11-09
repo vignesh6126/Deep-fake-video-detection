@@ -1,14 +1,20 @@
-#Add backend technologies
+# Core backend frameworks
 flask
+flask-cors
+werkzeug
+
+# PyTorch CPU versions
 torch==2.3.1+cpu
 torchvision==0.18.1+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
-flask-cors
-werkzeug
+
+# Utility libraries
 opencv-python-headless
 numpy
 Pillow
-tensorflow==2.17.0   # only if using Keras model; remove if not needed              # only if using PyTorch model
-onnxruntime         # only if using ONNX model
+
+# Optional ONNX support (if needed)
+onnxruntime
 onnx
-#testing ci/cd
+
+# testing ci/cd
