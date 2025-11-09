@@ -18,19 +18,21 @@ pipeline {
         }
 
         stage('Frontend Build') {
-            steps {
-                dir('frontend') {
-                    echo "⚙️ Building React frontend..."
-                    bat """
-                        echo REACT_APP_BACKEND_URL=${BACKEND_URL} > .env
-                        type .env
-                        npm install
-                        npm run build
-                    """
-                    echo "✅ Frontend build completed successfully."
-                }
-            }
+    steps {
+        dir('frontend') {
+            echo "⚙️ Building React frontend..."
+            // Ensure .env is created properly in Windows shell
+            bat """
+                echo REACT_APP_BACKEND_URL=%BACKEND_URL% > .env
+                type .env
+                call npm install
+                call npm run build
+            """
+            echo "✅ Frontend build completed successfully."
         }
+    }
+}
+
 
         stage('Backend Preparation') {
             steps {
