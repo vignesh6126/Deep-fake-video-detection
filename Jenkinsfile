@@ -93,28 +93,18 @@ pipeline {
             steps {
                 echo "Deploying containers to Azure Container Instances..."
                 withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
-                    powershell """
-                        Write-Host 'Extracting Azure credentials from JSON file...'
+                    bat """
+                        echo Loading Azure credentials from file...
+                        az login --service-principal --username %AZURE_CLIENT_ID% --password %AZURE_CLIENT_SECRET% --tenant %AZURE_TENANT_ID%
+                        az account set --subscription %AZURE_SUBSCRIPTION_ID%
 
-                        # Read JSON credentials
-                        `$json = Get-Content '${env:AZURE_AUTH_FILE}' | ConvertFrom-Json
-
-                        `$clientId = `$json.clientId.Trim()
-                        `$clientSecret = `$json.clientSecret.Trim()
-                        `$tenantId = `$json.tenantId.Trim()
-                        `$subscriptionId = `$json.subscriptionId.Trim()
-
-                        Write-Host 'Logging into Azure...'
-                        az login --service-principal --username `$clientId --password `$clientSecret --tenant `$tenantId
-                        az account set --subscription `$subscriptionId
-
-                        Write-Host 'Removing old ACI deployment (if exists)...'
+                        echo Removing old ACI deployment...
                         az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait
 
-                        Write-Host 'Creating new ACI container group...'
+                        echo Creating new ACI container group...
                         az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
 
-                        Write-Host 'Deployment completed successfully.'
+                        echo Deployment completed successfully.
                     """
                 }
             }
@@ -123,11 +113,11 @@ pipeline {
         stage('Health Check') {
             steps {
                 sleep time: 30, unit: 'SECONDS'
-                powershell """
-                    Write-Host 'Checking container status...'
+                bat """
+                    echo Checking container status...
                     az container show --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --query "containers[].{Name:name, State:instanceView.currentState.state}" -o table
                     
-                    Write-Host 'Checking frontend logs...'
+                    echo Checking frontend logs...
                     az container logs --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --container-name frontend --tail 10
                 """
             }
