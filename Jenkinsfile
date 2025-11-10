@@ -1,5 +1,9 @@
 pipeline {
     agent any
+    options {
+    timeout(time: 60, unit: 'MINUTES')
+}
+
 
     environment {
         // Docker Hub credentials and image info
@@ -16,11 +20,24 @@ pipeline {
     stages {
 
         stage('Checkout') {
-            steps {
-                echo "Checking out source code..."
-                checkout scm
-            }
-        }
+    steps {
+        echo "Checking out source code..."
+        // Clean workspace before clone
+        deleteDir()
+
+        // Clone the public GitHub repo with shallow depth
+        checkout([$class: 'GitSCM',
+            branches: [[name: '*/main']], // or '*/master' if your default branch is master
+            userRemoteConfigs: [[
+                url: 'https://github.com/vignesh6126/Deep-fake-video-detection.git'
+            ]],
+            extensions: [
+                [$class: 'CloneOption', shallow: true, depth: 1, timeout: 30]
+            ]
+        ])
+    }
+}
+
 
         stage('Frontend Build') {
             steps {
