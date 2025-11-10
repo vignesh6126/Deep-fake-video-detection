@@ -6,8 +6,8 @@ pipeline {
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
-        BACKEND_URL = "http://localhost:30008"  // Kubernetes backend NodePort
-        K8S_DIR = "K8s"                         // Folder containing YAML files
+        RESOURCE_GROUP = "deepfake-rg-india"
+        ACI_YAML = "deepfake-aci.yaml"
     }
 
     stages {
@@ -24,7 +24,7 @@ pipeline {
                 dir('frontend') {
                     echo "⚙️ Building React frontend..."
                     bat """
-                        echo REACT_APP_BACKEND_URL=%BACKEND_URL% > .env
+                        echo REACT_APP_BACKEND_URL=http://backend:8000 > .env
                         type .env
                         call npm install
                         call npm run build
@@ -65,45 +65,34 @@ pipeline {
             }
         }
 
-        stage('Login to Docker Hub') {
-            steps {
-                echo "🔐 Logging in to Docker Hub..."
-                bat """
-                    echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
-                """
-            }
-        }
-
         stage('Push Docker Images') {
             steps {
-                script {
-                    echo "🚀 Pushing backend image to Docker Hub..."
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    echo "🔐 Logging in to Docker Hub..."
+                    bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
                     bat "docker push ${BACKEND_IMAGE}:latest"
-
-                    echo "🚀 Pushing frontend image to Docker Hub..."
                     bat "docker push ${FRONTEND_IMAGE}:latest"
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to Azure ACI') {
             steps {
-                echo "☸️ Deploying application to Kubernetes..."
-                bat """
-                    kubectl set image deployment/deepfake-backend deepfake-backend=${BACKEND_IMAGE}:latest --record
-                    kubectl set image deployment/deepfake-frontend deepfake-frontend=${FRONTEND_IMAGE}:latest --record
+                echo "🚀 Deploying containers to Azure Container Instances..."
+                withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
+                    bat """
+                        az login --service-principal --username (jq -r .clientId %AZURE_AUTH_FILE%) ^
+                                 --password (jq -r .clientSecret %AZURE_AUTH_FILE%) ^
+                                 --tenant (jq -r .tenantId %AZURE_AUTH_FILE%)
+                        az account set --subscription (jq -r .subscriptionId %AZURE_AUTH_FILE%)
 
-                    echo "🔄 Restarting deployments..."
-                    kubectl rollout restart deployment/deepfake-backend
-                    kubectl rollout restart deployment/deepfake-frontend
+                        REM Delete old container group if exists
+                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes || echo "No old container"
 
-                    echo "✅ Waiting for pods to become ready..."
-                    kubectl rollout status deployment/deepfake-backend --timeout=120s
-                    kubectl rollout status deployment/deepfake-frontend --timeout=120s
-
-                    echo "🌐 Current Kubernetes services:"
-                    kubectl get svc
-                """
+                        REM Deploy new container group
+                        az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
+                    """
+                }
             }
         }
 
@@ -117,7 +106,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD pipeline completed — Docker images pushed and deployed to Kubernetes!"
+            echo "✅ CI/CD pipeline completed — Docker images pushed and deployed to Azure ACI!"
         }
         failure {
             echo "❌ Pipeline failed. Check Jenkins logs for errors."
