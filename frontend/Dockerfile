@@ -15,11 +15,10 @@ COPY . .
 # Build the React app with the backend URL baked in
 RUN npm run build
 
-
 # ---------- Stage 2: Serve using Nginx ----------
 FROM nginx:alpine
 
-# ✅ Copy custom Nginx configuration to increase upload limit
+# ✅ Copy custom Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # ✅ Copy build output from the previous stage
