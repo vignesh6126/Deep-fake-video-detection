@@ -93,18 +93,31 @@ pipeline {
             steps {
                 echo "Deploying containers to Azure Container Instances..."
                 withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
-                    bat """
-                        echo Loading Azure credentials from file...
-                        az login --service-principal --username %AZURE_CLIENT_ID% --password %AZURE_CLIENT_SECRET% --tenant %AZURE_TENANT_ID%
-                        az account set --subscription %AZURE_SUBSCRIPTION_ID%
-
-                        echo Removing old ACI deployment...
-                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait
-
-                        echo Creating new ACI container group...
-                        az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
-
-                        echo Deployment completed successfully.
+                    powershell """
+                        Write-Host "Loading Azure credentials from JSON file..."
+                        
+                        # Read and parse the JSON file
+                        `$authContent = Get-Content -Path '${env:AZURE_AUTH_FILE}' -Raw
+                        `$authObject = `$authContent | ConvertFrom-Json
+                        
+                        `$clientId = `$authObject.clientId.Trim()
+                        `$clientSecret = `$authObject.clientSecret.Trim()
+                        `$tenantId = `$authObject.tenantId.Trim()
+                        `$subscriptionId = `$authObject.subscriptionId.Trim()
+                        
+                        Write-Host "Logging into Azure..."
+                        az login --service-principal --username `$clientId --password `$clientSecret --tenant `$tenantId
+                        
+                        Write-Host "Setting subscription..."
+                        az account set --subscription `$subscriptionId
+                        
+                        Write-Host "Removing old ACI deployment..."
+                        az container delete --resource-group ${env:RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait
+                        
+                        Write-Host "Creating new ACI container group..."
+                        az container create --resource-group ${env:RESOURCE_GROUP} --file ${env:ACI_YAML}
+                        
+                        Write-Host "Deployment completed successfully."
                     """
                 }
             }
@@ -113,13 +126,25 @@ pipeline {
         stage('Health Check') {
             steps {
                 sleep time: 30, unit: 'SECONDS'
-                bat """
-                    echo Checking container status...
-                    az container show --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --query "containers[].{Name:name, State:instanceView.currentState.state}" -o table
-                    
-                    echo Checking frontend logs...
-                    az container logs --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --container-name frontend --tail 10
-                """
+                withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
+                    powershell """
+                        Write-Host "Checking container status..."
+                        
+                        # Read and parse the JSON file
+                        `$authContent = Get-Content -Path '${env:AZURE_AUTH_FILE}' -Raw
+                        `$authObject = `$authContent | ConvertFrom-Json
+                        
+                        `$clientId = `$authObject.clientId.Trim()
+                        `$clientSecret = `$authObject.clientSecret.Trim()
+                        `$tenantId = `$authObject.tenantId.Trim()
+                        
+                        az login --service-principal --username `$clientId --password `$clientSecret --tenant `$tenantId
+                        az container show --resource-group ${env:RESOURCE_GROUP} --name deepfake-app-group --query "containers[].{Name:name, State:instanceView.currentState.state}" -o table
+                        
+                        Write-Host "Checking frontend logs..."
+                        az container logs --resource-group ${env:RESOURCE_GROUP} --name deepfake-app-group --container-name frontend --tail 10
+                    """
+                }
             }
         }
     }
