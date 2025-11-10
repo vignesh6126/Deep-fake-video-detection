@@ -3,17 +3,14 @@ pipeline {
 
     options {
         timeout(time: 60, unit: 'MINUTES')
-        ansiColor('xterm') // Better colored logs
     }
 
     environment {
-        // 🔐 Docker Hub credentials
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
 
-        // 🌩️ Azure details
         RESOURCE_GROUP = "deepfake-rg-india"
         ACI_YAML = "deepfake-aci.yaml"
     }
@@ -94,33 +91,33 @@ pipeline {
         }
 
         stage('Deploy to Azure ACI') {
-    steps {
-        echo "🚀 Deploying containers to Azure ACI..."
-        withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
-            powershell """
-                Write-Host '🔑 Extracting Azure credentials...'
-                \$auth = Get-Content "$env:AZURE_AUTH_FILE" | ConvertFrom-Json
-                \$clientId = \$auth.clientId
-                \$clientSecret = \$auth.clientSecret
-                \$tenantId = \$auth.tenantId
-                \$subscriptionId = \$auth.subscriptionId
+            steps {
+                echo "🚀 Deploying containers to Azure ACI..."
+                withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
+                    powershell """
+                        Write-Host '🔑 Extracting Azure credentials...'
+                        \$auth = Get-Content "$env:AZURE_AUTH_FILE" | ConvertFrom-Json
+                        \$clientId = \$auth.clientId
+                        \$clientSecret = \$auth.clientSecret
+                        \$tenantId = \$auth.tenantId
+                        \$subscriptionId = \$auth.subscriptionId
 
-                Write-Host '🔐 Logging in to Azure...'
-                az login --service-principal --username \$clientId --password \$clientSecret --tenant \$tenantId | Out-Null
-                az account set --subscription \$subscriptionId
+                        Write-Host '🔐 Logging in to Azure...'
+                        az login --service-principal --username \$clientId --password \$clientSecret --tenant \$tenantId | Out-Null
+                        az account set --subscription \$subscriptionId
 
-                Write-Host '🧹 Removing old container group (if exists)...'
-                az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait | Out-Null
+                        Write-Host '🧹 Removing old container group (if exists)...'
+                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait | Out-Null
 
-                Start-Sleep -Seconds 10
-                Write-Host '⚡ Creating new container group from YAML...'
-                az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML} --no-wait
+                        Start-Sleep -Seconds 10
+                        Write-Host '⚡ Creating new container group from YAML...'
+                        az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML} --no-wait
 
-                Write-Host '✅ Deployment initiated successfully.'
-            """
+                        Write-Host '✅ Deployment initiated successfully.'
+                    """
+                }
+            }
         }
-    }
-}
 
         stage('Health Check & Logs') {
             steps {
