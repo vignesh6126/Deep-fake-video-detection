@@ -6,13 +6,10 @@ pipeline {
     }
 
     environment {
-        // Docker Hub credentials and image info
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
-
-        // Azure details
         RESOURCE_GROUP = "deepfake-rg-india"
         ACI_YAML = "deepfake-aci.yaml"
     }
@@ -99,7 +96,9 @@ pipeline {
                     powershell """
                         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                         Write-Host 'Extracting Azure credentials...'
-                        \$auth = Get-Content "$env:AZURE_AUTH_FILE" | ConvertFrom-Json
+
+                        \$filePath = '${env.AZURE_AUTH_FILE}'
+                        \$auth = Get-Content \$filePath | ConvertFrom-Json
                         \$clientId = \$auth.clientId
                         \$clientSecret = \$auth.clientSecret
                         \$tenantId = \$auth.tenantId
@@ -110,13 +109,13 @@ pipeline {
                         az account set --subscription \$subscriptionId
 
                         Write-Host 'Removing old container group if it exists...'
-                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait | Out-Null
+                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes
 
                         Start-Sleep -Seconds 10
                         Write-Host 'Creating new container group from YAML...'
-                        az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML} --no-wait
+                        az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
 
-                        Write-Host 'Deployment initiated successfully.'
+                        Write-Host 'Deployment completed.'
                     """
                 }
             }
@@ -130,7 +129,9 @@ pipeline {
                 withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
                     powershell """
                         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-                        \$auth = Get-Content "$env:AZURE_AUTH_FILE" | ConvertFrom-Json
+                        \$filePath = '${env.AZURE_AUTH_FILE}'
+                        \$auth = Get-Content \$filePath | ConvertFrom-Json
+
                         az login --service-principal --username \$auth.clientId --password \$auth.clientSecret --tenant \$auth.tenantId | Out-Null
                         az account set --subscription \$auth.subscriptionId
 
@@ -138,7 +139,7 @@ pipeline {
                         az container show --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --query "properties.containers[].{Name:name,State:properties.instanceView.currentState.state}" -o table
 
                         Write-Host 'Fetching frontend logs...'
-                        az container logs --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --container-name frontend --tail 10
+                        az container logs --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --container-name frontend
                     """
                 }
             }
