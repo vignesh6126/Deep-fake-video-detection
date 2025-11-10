@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     options {
-        timeout(time: 60, unit: 'MINUTES') // Prevents long build termination
+        timeout(time: 60, unit: 'MINUTES')
     }
 
     environment {
@@ -18,14 +18,10 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                echo "Checking out source code manually..."
-                deleteDir()
-                bat """
-                    git clone --depth 1 --branch main https://github.com/vignesh6126/Deep-fake-video-detection.git .
-                """
+                echo "Checking out source code..."
+                checkout scm  // Use Jenkins' built-in checkout instead of manual git clone
                 echo "Repository cloned successfully."
             }
         }
@@ -35,7 +31,7 @@ pipeline {
                 dir('frontend') {
                     echo "Building React frontend..."
                     bat """
-                        echo REACT_APP_BACKEND_URL=http://backend:8000 > .env
+                        echo REACT_APP_BACKEND_URL=http://localhost:8000 > .env  // FIXED: Use localhost instead of backend
                         type .env
                         call npm install
                         call npm run build
@@ -60,7 +56,7 @@ pipeline {
         stage('Verify Docker Daemon') {
             steps {
                 echo "Checking if Docker is running..."
-                bat 'docker version || (echo Docker is not running! && exit /b 1)'
+                bat 'docker version'
             }
         }
 
@@ -71,18 +67,25 @@ pipeline {
                     bat "docker build -t ${BACKEND_IMAGE}:latest ./backend"
 
                     echo "Building frontend Docker image..."
-                    bat "docker build -t ${FRONTEND_IMAGE}:latest ./frontend"
+                    // FIXED: Add build arg for backend URL
+                    bat "docker build -t ${FRONTEND_IMAGE}:latest --build-arg REACT_APP_BACKEND_URL=http://localhost:8000 ./frontend"
                 }
             }
         }
 
         stage('Push Docker Images') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    echo "Logging in to Docker Hub..."
-                    bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
-                    bat "docker push ${BACKEND_IMAGE}:latest"
-                    bat "docker push ${FRONTEND_IMAGE}:latest"
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        echo "Logging in to Docker Hub..."
+                        bat "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin"
+                        
+                        echo "Pushing backend image..."
+                        bat "docker push ${BACKEND_IMAGE}:latest"
+                        
+                        echo "Pushing frontend image..."
+                        bat "docker push ${FRONTEND_IMAGE}:latest"
+                    }
                 }
             }
         }
@@ -95,19 +98,19 @@ pipeline {
                         Write-Host 'Extracting Azure credentials from JSON file...'
 
                         # Read JSON credentials
-                        \$json = Get-Content '${env:AZURE_AUTH_FILE}' | ConvertFrom-Json
+                        `$json = Get-Content '${env:AZURE_AUTH_FILE}' | ConvertFrom-Json
 
-                        \$clientId = \$json.clientId.Trim()
-                        \$clientSecret = \$json.clientSecret.Trim()
-                        \$tenantId = \$json.tenantId.Trim()
-                        \$subscriptionId = \$json.subscriptionId.Trim()
+                        `$clientId = `$json.clientId.Trim()
+                        `$clientSecret = `$json.clientSecret.Trim()
+                        `$tenantId = `$json.tenantId.Trim()
+                        `$subscriptionId = `$json.subscriptionId.Trim()
 
                         Write-Host 'Logging into Azure...'
-                        az login --service-principal --username \$clientId --password \$clientSecret --tenant \$tenantId
-                        az account set --subscription \$subscriptionId
+                        az login --service-principal --username `$clientId --password `$clientSecret --tenant `$tenantId
+                        az account set --subscription `$subscriptionId
 
                         Write-Host 'Removing old ACI deployment (if exists)...'
-                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait 2>\$null
+                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait 2>`$null
 
                         Write-Host 'Creating new ACI container group...'
                         az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
@@ -118,10 +121,16 @@ pipeline {
             }
         }
 
-        stage('Cleanup') {
+        stage('Health Check') {
             steps {
-                echo "Cleaning up Docker environment..."
-                bat 'docker system prune -af || echo Cleanup skipped'
+                sleep time: 30, unit: 'SECONDS' // Wait for containers to start
+                powershell """
+                    Write-Host 'Checking container status...'
+                    az container show --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --query "containers[].{Name:name, State:instanceView.currentState.state}" -o table
+                    
+                    Write-Host 'Checking frontend logs...'
+                    az container logs --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --container-name frontend --tail 10
+                """
             }
         }
     }
@@ -129,6 +138,7 @@ pipeline {
     post {
         success {
             echo "Pipeline completed successfully. Docker images pushed and deployed to Azure ACI."
+            // Optional: Add notification here
         }
         failure {
             echo "Pipeline failed. Check Jenkins logs for detailed errors."
