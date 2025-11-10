@@ -6,10 +6,12 @@ pipeline {
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
-        BACKEND_URL = "http://localhost:30008" // Kubernetes NodePort for backend
+        BACKEND_URL = "http://localhost:30008"  // Kubernetes backend NodePort
+        K8S_DIR = "K8s"                         // Folder containing YAML files
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 echo "📦 Checking out source code..."
@@ -18,21 +20,19 @@ pipeline {
         }
 
         stage('Frontend Build') {
-    steps {
-        dir('frontend') {
-            echo "⚙️ Building React frontend..."
-            // Ensure .env is created properly in Windows shell
-            bat """
-                echo REACT_APP_BACKEND_URL=%BACKEND_URL% > .env
-                type .env
-                call npm install
-                call npm run build
-            """
-            echo "✅ Frontend build completed successfully."
+            steps {
+                dir('frontend') {
+                    echo "⚙️ Building React frontend..."
+                    bat """
+                        echo REACT_APP_BACKEND_URL=%BACKEND_URL% > .env
+                        type .env
+                        call npm install
+                        call npm run build
+                    """
+                    echo "✅ Frontend build completed successfully."
+                }
+            }
         }
-    }
-}
-
 
         stage('Backend Preparation') {
             steps {
@@ -49,7 +49,7 @@ pipeline {
         stage('Verify Docker Daemon') {
             steps {
                 echo "🔍 Checking if Docker is running..."
-                bat 'docker version || (echo Docker is not running! && exit /b 1)'
+                bat 'docker version || (echo ❌ Docker is not running! && exit /b 1)'
             }
         }
 
@@ -86,6 +86,27 @@ pipeline {
             }
         }
 
+        stage('Deploy to Kubernetes') {
+            steps {
+                echo "☸️ Deploying application to Kubernetes..."
+                bat """
+                    kubectl set image deployment/deepfake-backend deepfake-backend=${BACKEND_IMAGE}:latest --record
+                    kubectl set image deployment/deepfake-frontend deepfake-frontend=${FRONTEND_IMAGE}:latest --record
+
+                    echo "🔄 Restarting deployments..."
+                    kubectl rollout restart deployment/deepfake-backend
+                    kubectl rollout restart deployment/deepfake-frontend
+
+                    echo "✅ Waiting for pods to become ready..."
+                    kubectl rollout status deployment/deepfake-backend --timeout=120s
+                    kubectl rollout status deployment/deepfake-frontend --timeout=120s
+
+                    echo "🌐 Current Kubernetes services:"
+                    kubectl get svc
+                """
+            }
+        }
+
         stage('Cleanup') {
             steps {
                 echo "🧹 Cleaning up Docker environment..."
@@ -96,10 +117,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Build and push completed successfully!"
+            echo "✅ CI/CD pipeline completed — Docker images pushed and deployed to Kubernetes!"
         }
         failure {
-            echo "❌ Build failed. Check Jenkins logs for details."
+            echo "❌ Pipeline failed. Check Jenkins logs for errors."
         }
         always {
             cleanWs()
