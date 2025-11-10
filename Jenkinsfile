@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        timeout(time: 60, unit: 'MINUTES') // Prevents long build termination
+    }
+
     environment {
         // Docker Hub credentials and image info
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
@@ -17,8 +21,12 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                echo "Checking out source code..."
-                checkout scm
+                echo "Checking out source code manually..."
+                deleteDir()
+                bat """
+                    git clone --depth 1 --branch main https://github.com/vignesh6126/Deep-fake-video-detection.git .
+                """
+                echo "Repository cloned successfully."
             }
         }
 
@@ -86,7 +94,7 @@ pipeline {
                     powershell """
                         Write-Host 'Extracting Azure credentials from JSON file...'
 
-                        # Read JSON file using PowerShell
+                        # Read JSON credentials
                         \$json = Get-Content '${env:AZURE_AUTH_FILE}' | ConvertFrom-Json
 
                         \$clientId = \$json.clientId.Trim()
@@ -98,10 +106,10 @@ pipeline {
                         az login --service-principal --username \$clientId --password \$clientSecret --tenant \$tenantId
                         az account set --subscription \$subscriptionId
 
-                        Write-Host 'Removing old ACI deployment if it exists...'
+                        Write-Host 'Removing old ACI deployment (if exists)...'
                         az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait 2>\$null
 
-                        Write-Host 'Creating new Azure Container Instance...'
+                        Write-Host 'Creating new ACI container group...'
                         az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
 
                         Write-Host 'Deployment completed successfully.'
