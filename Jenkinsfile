@@ -6,11 +6,13 @@ pipeline {
     }
 
     environment {
+        // Docker Hub credentials and image info
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
 
+        // Azure details
         RESOURCE_GROUP = "deepfake-rg-india"
         ACI_YAML = "deepfake-aci.yaml"
     }
@@ -18,23 +20,23 @@ pipeline {
     stages {
         stage('Checkout Source Code') {
             steps {
-                echo "📦 Checking out latest code from GitHub..."
+                echo "Checking out latest code from GitHub..."
                 checkout scm
-                echo "✅ Repository cloned successfully."
+                echo "Repository cloned successfully."
             }
         }
 
         stage('Build Frontend (React)') {
             steps {
                 dir('frontend') {
-                    echo "⚙️ Building React frontend..."
+                    echo "Building React frontend..."
                     bat """
                         echo REACT_APP_BACKEND_URL=http://localhost:8000 > .env
                         type .env
                         call npm install
                         call npm run build
                     """
-                    echo "✅ Frontend build completed successfully."
+                    echo "Frontend build completed successfully."
                 }
             }
         }
@@ -42,32 +44,32 @@ pipeline {
         stage('Prepare Backend (Python)') {
             steps {
                 dir('backend') {
-                    echo "🐍 Installing backend dependencies..."
+                    echo "Installing backend dependencies..."
                     bat """
                         python --version
                         python -m pip install --upgrade pip
                         python -m pip install --no-cache-dir -r requirements.txt
                     """
-                    echo "✅ Backend dependencies installed successfully."
+                    echo "Backend dependencies installed successfully."
                 }
             }
         }
 
         stage('Verify Docker Daemon') {
             steps {
-                echo "🔍 Checking Docker service..."
-                bat 'docker version || (echo ❌ Docker not running! && exit /b 1)'
-                echo "✅ Docker is active."
+                echo "Checking Docker service..."
+                bat 'docker version || (echo Docker is not running! && exit /b 1)'
+                echo "Docker is active."
             }
         }
 
         stage('Build Docker Images') {
             steps {
                 script {
-                    echo "🐳 Building backend image..."
+                    echo "Building backend image..."
                     bat "docker build -t ${BACKEND_IMAGE}:latest ./backend"
 
-                    echo "🌈 Building frontend image..."
+                    echo "Building frontend image..."
                     bat "docker build -t ${FRONTEND_IMAGE}:latest --build-arg REACT_APP_BACKEND_URL=http://localhost:8000 ./frontend"
                 }
             }
@@ -77,13 +79,13 @@ pipeline {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        echo "🔐 Logging in to Docker Hub..."
+                        echo "Logging in to Docker Hub..."
                         bat "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin"
 
-                        echo "⬆️ Pushing backend image..."
+                        echo "Pushing backend image..."
                         bat "docker push ${BACKEND_IMAGE}:latest"
 
-                        echo "⬆️ Pushing frontend image..."
+                        echo "Pushing frontend image..."
                         bat "docker push ${FRONTEND_IMAGE}:latest"
                     }
                 }
@@ -92,48 +94,50 @@ pipeline {
 
         stage('Deploy to Azure ACI') {
             steps {
-                echo "🚀 Deploying containers to Azure ACI..."
+                echo "Deploying containers to Azure ACI..."
                 withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
                     powershell """
-                        Write-Host '🔑 Extracting Azure credentials...'
+                        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                        Write-Host 'Extracting Azure credentials...'
                         \$auth = Get-Content "$env:AZURE_AUTH_FILE" | ConvertFrom-Json
                         \$clientId = \$auth.clientId
                         \$clientSecret = \$auth.clientSecret
                         \$tenantId = \$auth.tenantId
                         \$subscriptionId = \$auth.subscriptionId
 
-                        Write-Host '🔐 Logging in to Azure...'
+                        Write-Host 'Logging in to Azure...'
                         az login --service-principal --username \$clientId --password \$clientSecret --tenant \$tenantId | Out-Null
                         az account set --subscription \$subscriptionId
 
-                        Write-Host '🧹 Removing old container group (if exists)...'
+                        Write-Host 'Removing old container group if it exists...'
                         az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait | Out-Null
 
                         Start-Sleep -Seconds 10
-                        Write-Host '⚡ Creating new container group from YAML...'
+                        Write-Host 'Creating new container group from YAML...'
                         az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML} --no-wait
 
-                        Write-Host '✅ Deployment initiated successfully.'
+                        Write-Host 'Deployment initiated successfully.'
                     """
                 }
             }
         }
 
-        stage('Health Check & Logs') {
+        stage('Health Check and Logs') {
             steps {
-                echo "🩺 Checking container health..."
+                echo "Checking Azure container health status..."
                 sleep time: 45, unit: 'SECONDS'
 
                 withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
                     powershell """
+                        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                         \$auth = Get-Content "$env:AZURE_AUTH_FILE" | ConvertFrom-Json
                         az login --service-principal --username \$auth.clientId --password \$auth.clientSecret --tenant \$auth.tenantId | Out-Null
                         az account set --subscription \$auth.subscriptionId
 
-                        Write-Host '📊 Checking container states...'
+                        Write-Host 'Checking container states...'
                         az container show --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --query "properties.containers[].{Name:name,State:properties.instanceView.currentState.state}" -o table
 
-                        Write-Host '🧾 Fetching frontend logs...'
+                        Write-Host 'Fetching frontend logs...'
                         az container logs --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --container-name frontend --tail 10
                     """
                 }
@@ -143,13 +147,13 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD pipeline completed successfully — Images deployed to Azure ACI!"
+            echo "Pipeline completed successfully. Docker images built, pushed, and deployed to Azure ACI."
         }
         failure {
-            echo "❌ Pipeline failed. Please check Jenkins logs and Azure deployment output."
+            echo "Pipeline failed. Please check Jenkins logs and Azure deployment output."
         }
         always {
-            echo "🧹 Cleaning up workspace..."
+            echo "Cleaning up workspace..."
             cleanWs()
         }
     }
