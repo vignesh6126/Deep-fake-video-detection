@@ -2,10 +2,13 @@ pipeline {
     agent any
 
     environment {
+        // 🔐 Docker Hub credentials and image info
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
+
+        // 🌩️ Azure details
         RESOURCE_GROUP = "deepfake-rg-india"
         ACI_YAML = "deepfake-aci.yaml"
     }
@@ -81,16 +84,29 @@ pipeline {
                 echo "🚀 Deploying containers to Azure Container Instances..."
                 withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
                     bat """
-                        az login --service-principal --username (jq -r .clientId %AZURE_AUTH_FILE%) ^
-                                 --password (jq -r .clientSecret %AZURE_AUTH_FILE%) ^
-                                 --tenant (jq -r .tenantId %AZURE_AUTH_FILE%)
-                        az account set --subscription (jq -r .subscriptionId %AZURE_AUTH_FILE%)
+                        echo 🔍 Extracting Azure credentials from JSON file...
+                        for /f "tokens=2 delims=:,{}\"" %%i in ('findstr "clientId" %AZURE_AUTH_FILE%') do set CLIENT_ID=%%~i
+                        for /f "tokens=2 delims=:,{}\"" %%i in ('findstr "clientSecret" %AZURE_AUTH_FILE%') do set CLIENT_SECRET=%%~i
+                        for /f "tokens=2 delims=:,{}\"" %%i in ('findstr "tenantId" %AZURE_AUTH_FILE%') do set TENANT_ID=%%~i
+                        for /f "tokens=2 delims=:,{}\"" %%i in ('findstr "subscriptionId" %AZURE_AUTH_FILE%') do set SUB_ID=%%~i
 
-                        REM Delete old container group if exists
-                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes || echo "No old container"
+                        REM 🧹 Clean up quotes and spaces
+                        set CLIENT_ID=%CLIENT_ID:"=%
+                        set CLIENT_SECRET=%CLIENT_SECRET:"=%
+                        set TENANT_ID=%TENANT_ID:"=%
+                        set SUB_ID=%SUB_ID:"=%
 
-                        REM Deploy new container group
+                        echo 🔑 Logging into Azure...
+                        az login --service-principal --username %CLIENT_ID% --password %CLIENT_SECRET% --tenant %TENANT_ID%
+                        az account set --subscription %SUB_ID%
+
+                        echo 🗑️ Removing any existing container group...
+                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes || echo "No old container found"
+
+                        echo 🚀 Creating new ACI container group...
                         az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
+
+                        echo ✅ Azure deployment completed successfully!
                     """
                 }
             }
@@ -106,10 +122,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD pipeline completed — Docker images pushed and deployed to Azure ACI!"
+            echo "✅ CI/CD pipeline completed — Docker images pushed and deployed to Azure ACI successfully!"
         }
         failure {
-            echo "❌ Pipeline failed. Check Jenkins logs for errors."
+            echo "❌ Pipeline failed. Check Jenkins logs for detailed errors."
         }
         always {
             cleanWs()
