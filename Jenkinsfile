@@ -80,37 +80,35 @@ pipeline {
         }
 
         stage('Deploy to Azure ACI') {
-            steps {
-                echo "🚀 Deploying containers to Azure Container Instances..."
-                withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
-                    bat """
-                        echo 🔍 Extracting Azure credentials from JSON file...
-                        for /f "tokens=2 delims=:,{}\"" %%i in ('findstr "clientId" %AZURE_AUTH_FILE%') do set CLIENT_ID=%%~i
-                        for /f "tokens=2 delims=:,{}\"" %%i in ('findstr "clientSecret" %AZURE_AUTH_FILE%') do set CLIENT_SECRET=%%~i
-                        for /f "tokens=2 delims=:,{}\"" %%i in ('findstr "tenantId" %AZURE_AUTH_FILE%') do set TENANT_ID=%%~i
-                        for /f "tokens=2 delims=:,{}\"" %%i in ('findstr "subscriptionId" %AZURE_AUTH_FILE%') do set SUB_ID=%%~i
+    steps {
+        echo "🚀 Deploying containers to Azure Container Instances..."
+        withCredentials([file(credentialsId: 'azure-auth-json', variable: 'AZURE_AUTH_FILE')]) {
+            powershell """
+                Write-Host '🔍 Extracting Azure credentials from JSON file...'
 
-                        REM 🧹 Clean up quotes and spaces
-                        set CLIENT_ID=%CLIENT_ID:"=%
-                        set CLIENT_SECRET=%CLIENT_SECRET:"=%
-                        set TENANT_ID=%TENANT_ID:"=%
-                        set SUB_ID=%SUB_ID:"=%
+                # Read JSON file
+                \$json = Get-Content $env:AZURE_AUTH_FILE | ConvertFrom-Json
+                \$clientId = \$json.clientId.Trim()
+                \$clientSecret = \$json.clientSecret.Trim()
+                \$tenantId = \$json.tenantId.Trim()
+                \$subscriptionId = \$json.subscriptionId.Trim()
 
-                        echo 🔑 Logging into Azure...
-                        az login --service-principal --username %CLIENT_ID% --password %CLIENT_SECRET% --tenant %TENANT_ID%
-                        az account set --subscription %SUB_ID%
+                Write-Host '🔑 Logging into Azure...'
+                az login --service-principal --username \$clientId --password \$clientSecret --tenant \$tenantId
+                az account set --subscription \$subscriptionId
 
-                        echo 🗑️ Removing any existing container group...
-                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes || echo "No old container found"
+                Write-Host '🗑️ Removing old ACI deployment if exists...'
+                az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait 2>\$null
 
-                        echo 🚀 Creating new ACI container group...
-                        az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
+                Write-Host '🚀 Creating new Azure Container Instance...'
+                az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
 
-                        echo ✅ Azure deployment completed successfully!
-                    """
-                }
-            }
+                Write-Host '✅ Deployment completed successfully!'
+            """
         }
+    }
+}
+
 
         stage('Cleanup') {
             steps {
