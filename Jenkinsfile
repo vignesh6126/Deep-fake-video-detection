@@ -6,13 +6,13 @@ pipeline {
     }
 
     environment {
-        // Docker Hub credentials and image info
+        
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
 
-        // Azure details
+        
         RESOURCE_GROUP = "deepfake-rg-india"
         ACI_YAML = "deepfake-aci.yaml"
     }
@@ -21,7 +21,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Checking out source code..."
-                checkout scm  // Use Jenkins' built-in checkout instead of manual git clone
+                checkout scm  
                 echo "Repository cloned successfully."
             }
         }
@@ -67,7 +67,7 @@ pipeline {
                     bat "docker build -t ${BACKEND_IMAGE}:latest ./backend"
 
                     echo "Building frontend Docker image..."
-                    // FIXED: Add build arg for backend URL
+                    
                     bat "docker build -t ${FRONTEND_IMAGE}:latest --build-arg REACT_APP_BACKEND_URL=http://localhost:8000 ./frontend"
                 }
             }
@@ -123,7 +123,7 @@ pipeline {
 
         stage('Health Check') {
             steps {
-                sleep time: 30, unit: 'SECONDS' // Wait for containers to start
+                sleep time: 30, unit: 'SECONDS' 
                 powershell """
                     Write-Host 'Checking container status...'
                     az container show --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --query "containers[].{Name:name, State:instanceView.currentState.state}" -o table
@@ -138,7 +138,7 @@ pipeline {
     post {
         success {
             echo "Pipeline completed successfully. Docker images pushed and deployed to Azure ACI."
-            // Optional: Add notification here
+            
         }
         failure {
             echo "Pipeline failed. Check Jenkins logs for detailed errors."
