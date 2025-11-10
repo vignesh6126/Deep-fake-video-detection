@@ -6,13 +6,13 @@ pipeline {
     }
 
     environment {
-        
+        // Docker Hub credentials and image info
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_USER = "vignesg043"
         BACKEND_IMAGE = "${DOCKERHUB_USER}/deepfake-backend"
         FRONTEND_IMAGE = "${DOCKERHUB_USER}/deepfake-frontend"
 
-        
+        // Azure details
         RESOURCE_GROUP = "deepfake-rg-india"
         ACI_YAML = "deepfake-aci.yaml"
     }
@@ -21,7 +21,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Checking out source code..."
-                checkout scm  
+                checkout scm
                 echo "Repository cloned successfully."
             }
         }
@@ -31,7 +31,7 @@ pipeline {
                 dir('frontend') {
                     echo "Building React frontend..."
                     bat """
-                        echo REACT_APP_BACKEND_URL=http://localhost:8000 > .env  // FIXED: Use localhost instead of backend
+                        echo REACT_APP_BACKEND_URL=http://localhost:8000 > .env
                         type .env
                         call npm install
                         call npm run build
@@ -67,7 +67,6 @@ pipeline {
                     bat "docker build -t ${BACKEND_IMAGE}:latest ./backend"
 
                     echo "Building frontend Docker image..."
-                    
                     bat "docker build -t ${FRONTEND_IMAGE}:latest --build-arg REACT_APP_BACKEND_URL=http://localhost:8000 ./frontend"
                 }
             }
@@ -110,7 +109,7 @@ pipeline {
                         az account set --subscription `$subscriptionId
 
                         Write-Host 'Removing old ACI deployment (if exists)...'
-                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait 2>`$null
+                        az container delete --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --yes --no-wait
 
                         Write-Host 'Creating new ACI container group...'
                         az container create --resource-group ${RESOURCE_GROUP} --file ${ACI_YAML}
@@ -123,7 +122,7 @@ pipeline {
 
         stage('Health Check') {
             steps {
-                sleep time: 30, unit: 'SECONDS' 
+                sleep time: 30, unit: 'SECONDS'
                 powershell """
                     Write-Host 'Checking container status...'
                     az container show --resource-group ${RESOURCE_GROUP} --name deepfake-app-group --query "containers[].{Name:name, State:instanceView.currentState.state}" -o table
@@ -138,7 +137,6 @@ pipeline {
     post {
         success {
             echo "Pipeline completed successfully. Docker images pushed and deployed to Azure ACI."
-            
         }
         failure {
             echo "Pipeline failed. Check Jenkins logs for detailed errors."
